@@ -1,0 +1,30 @@
+{
+  "opis_uredjaja": {
+
+    "grupa": "KUPATILO",
+
+    "podgrupa": "Aktuator",
+
+    "identifikacija": {
+      "id": "id:kupatilo-svetlo-aktuator",
+      "tip": "urn:schemas-upnp-org:device:LightActuator:1",
+      "friendly_name": "Pametno Osvetljenje - Aktuator",
+      "port": 1906
+    },
+
+    "servisi": [
+      "urn:schemas-upnp-org:service:SwitchPower:1"
+    ],
+
+    "karakteristike_parametara": {
+      "status": {
+        "tip_podatka": "string",
+        "dozvoljene_vrednosti": ["on", "off"]
+      }
+    }
+  },
+  
+  "stanje_uredjaja": {
+    "status": "off"
+  }
+}

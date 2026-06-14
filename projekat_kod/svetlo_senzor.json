@@ -1,0 +1,36 @@
+{
+  "opis_uredjaja": {
+
+    "grupa": "KUPATILO",
+
+    "podgrupa": "Senzor",
+
+    "identifikacija": {
+      "id": "id:kupatilo-svetlo-senzor",
+      "tip": "urn:schemas-upnp-org:device:MotionSensor:1",
+      "friendly_name": "Pametno Osvetljenje - Senzor Pokreta",
+      "port": 1907
+    },
+
+    "servisi": [
+      "urn:schemas-upnp-org:service:MotionDetection:1"
+    ],
+
+    "karakteristike_parametara": {
+      "status": {
+        "tip_podatka": "string",
+        "dozvoljene_vrednosti": ["on", "off"]
+      },
+
+      "pokret_detektovan": {
+        "tip_podatka": "boolean",
+        "dozvoljene_vrednosti": [true, false]
+      }
+    }
+  },
+  
+  "stanje_uredjaja": {
+    "status": "on",
+    "pokret_detektovan": false
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "opis_uredjaja": {
+
+    "grupa": "KUPATILO",
+
+    "podgrupa": "Senzor",
+
+    "identifikacija": {
+      "id": "id:kupatilo-bojler-senzor",
+      "tip": "urn:schemas-upnp-org:device:TemperatureSensor:1",
+      "friendly_name": "Smart Bojler - Senzor Temperature",
+      "port": 1903
+    },
+
+    "servisi": [
+      "urn:schemas-upnp-org:service:TemperatureControl:1"
+    ],
+
+    "karakteristike_parametara": {
+      "temperatura_vode": {
+        "tip_podatka": "integer",
+        "jedinica_mere": "°C",
+        "min": 10,
+        "max": 60
+      }
+    }
+  },
+
+  "stanje_uredjaja": {
+    "status": "on",
+    "temperatura_vode": 42
+  }
+}

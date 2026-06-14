@@ -1,0 +1,30 @@
+{
+  "opis_uredjaja": {
+
+    "grupa": "KUPATILO",
+
+    "podgrupa": "Aktuator",
+
+    "identifikacija": {
+      "id": "id:kupatilo-ventilator-aktuator",
+      "tip": "urn:schemas-upnp-org:device:FanActuator:1",
+      "friendly_name": "Pametna Ventilacija - Aktuator",
+      "port": 1904
+    },
+
+    "servisi": [
+      "urn:schemas-upnp-org:service:SwitchPower:1"
+    ],
+
+    "karakteristike_parametara": {
+      "status": {
+        "tip_podatka": "string",
+        "dozvoljene_vrednosti": ["on", "off"]
+      }
+    }
+  },
+
+  "stanje_uredjaja": {
+    "status": "off"
+  }
+}

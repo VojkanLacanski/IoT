@@ -1,0 +1,38 @@
+{
+  "opis_uredjaja": {
+
+    "grupa": "KUPATILO",
+
+    "podgrupa": "Senzor",
+
+    "identifikacija": {
+      "id": "id:kupatilo-ventilator-senzor",
+      "tip": "urn:schemas-upnp-org:device:HumiditySensor:1",
+      "friendly_name": "Pametna Ventilacija - Senzor Vlažnosti",
+      "port": 1905
+    },
+
+    "servisi": [
+      "urn:schemas-upnp-org:service:HumidityControl:1"
+    ],
+
+    "karakteristike_parametara": {
+      "status": {
+        "tip_podatka": "string",
+        "dozvoljene_vrednosti": ["on", "off"]
+      },
+
+      "vlaznost_vazduha": {
+        "tip_podatka": "integer",
+        "jedinica_mere": "%",
+        "min": 0,
+        "max": 100
+      }
+    }
+  },
+
+  "stanje_uredjaja": {
+    "status": "off",
+    "vlaznost_vazduha": 45
+  }
+}

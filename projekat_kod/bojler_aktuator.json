@@ -1,0 +1,34 @@
+{
+  "opis_uredjaja": {
+
+    "grupa": "KUPATILO",
+
+    "podgrupa": "Aktuator",
+
+    "identifikacija": {
+      "id": "id:kupatilo-bojler-aktuator",
+      "tip": "urn:schemas-upnp-org:device:WaterHeaterActuator:1",
+      "friendly_name": "Pametni Bojler - Aktuator",
+      "port": 1901
+    },
+
+    "servisi": [
+      "urn:schemas-upnp-org:service:SwitchPower:1"
+    ],
+
+    "karakteristike_parametara": {
+      "status": {
+        "tip_podatka": "string",
+        "dozvoljene_vrednosti": ["on", "off"]
+      },
+      "grejac_aktivno": {
+        "tip_podatka": "boolean",
+        "dozvoljene_vrednosti": [true, false]
+      }
+    }
+  },
+
+  "stanje_uredjaja": {
+    "status": "off"
+  }
+}
