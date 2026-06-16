@@ -357,6 +357,8 @@ def on_connect(client, userdata, flags, rc):
 
 
 def on_message(client, userdata, msg):
+    global poslednji_pokret_ts, svetlo_trenutno
+
     tema = msg.topic
     poruka = msg.payload.decode("utf-8")
     print(f"[MQTT] Tema: {tema} | Poruka: {poruka}")
