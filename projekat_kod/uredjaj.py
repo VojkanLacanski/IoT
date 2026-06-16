@@ -11,6 +11,28 @@ MULTICAST_ADDR = "239.255.255.250"   # SSDP standardna multicast adresa
 MULTICAST_PORT = 1900                # SSDP standardni port
 MQTT_BROKER = "127.0.0.1"            # Adresa MQTT brokera
 MQTT_PORT = 1883                     # Port MQTT brokera
+TEMA_STANJA_AKTUATORA = "kupatilo/aktuatori/stanje"
+
+INTERVAL_OBJAVE_SEC = 5
+INTERVAL_OBJAVE_AKTUATORA_SEC = 5
+
+TEMP_MIN = 10
+TEMP_MAX = 60
+
+VLAGA_MIN = 0
+VLAGA_MAX = 100
+
+PERIOD_BEZ_POKRETA_POSLE_DETEKCIJE = 10
+
+stanja_aktuatora = {
+    "bojler": "off",
+    "ventilator": "off",
+    "svetlo": "off"
+}
+
+pokret_blokiran_do = 0
+
+state_lock = threading.Lock()
 
 config = {}     # Ucitani JSON fajl uredjaja
 sock   = None   # UDP socket
@@ -42,6 +64,19 @@ def uzmi_tip():
 def uzmi_port():
     """Vraca port na kom ovaj uredjaj slusa unicast poruke."""
     return config["opis_uredjaja"]["identifikacija"]["port"]
+
+
+def uzmi_ime_uredjaja():
+    """
+    Iz ID-ja tipa id:kupatilo-bojler-senzor
+    izvlaci ime uredjaja: bojler, ventilator ili svetlo.
+    """
+    delovi = uzmi_id().split("-")
+
+    if len(delovi) >= 2:
+        return delovi[1]
+
+    return "nepoznato"
 
 
 def uzmi_stanje():
@@ -144,65 +179,191 @@ def on_connect(client, userdata, flags, rc):
 
         # Informacija da li je uredjaj AKTUATOR ili SENZOR
         podgrupa = config["opis_uredjaja"]["podgrupa"]
-        uredjaj_id = uzmi_id()
-
-        # Izvlacimo ime uredjaja iz id-a
-        delovi = uredjaj_id.split("-")
-        ime_uredjaja = "nepoznato"
-        if len(delovi) >= 2:
-            ime_uredjaja = delovi[1]
+        ime_uredjaja = uzmi_ime_uredjaja()
 
         if podgrupa == "Aktuator":
             tema_set = f"kupatilo/{ime_uredjaja}/set"
-            client.subscribe(tema_set)
+            client.subscribe(tema_set, qos=1)
             print(f"[MQTT] Pretplacen na temu: {tema_set}")
+            objavi_stanje_aktuatora(client)
     else:
         print(f"[MQTT] Neuspesna konekcija, kod: {rc}")
 
 
 def on_message(client, userdata, msg):
     tema = msg.topic
-    poruka = msg.payload.decode("utf-8")
+    poruka = msg.payload.decode("utf-8").upper()
     print(f"[MQTT] Tema: {tema} | Poruka: {poruka}")
 
-    # Samo aktuatori vrse promenu stanja
-    if poruka.upper() in ["ON", "OFF"]:
-        config["stanje_uredjaja"]["status"] = poruka.lower()
-        print(f"[ACTION] Novo stanje je: {poruka.lower()}")
+    podgrupa = config["opis_uredjaja"]["podgrupa"]
+
+    if podgrupa != "Aktuator":
+        return
+
+    if poruka not in ["ON", "OFF"]:
+        return
+    
+    ime_uredjaja = uzmi_ime_uredjaja()
+
+    config["stanje_uredjaja"]["status"] = poruka.lower()
+
+    with state_lock:
+        stanja_aktuatora[ime_uredjaja] = poruka.lower()
+
+    print(f"[ACTION] Novo stanje je: {poruka.lower()}")
+
+    objavi_stanje_aktuatora(client)
+
+
+def objavi_stanje_aktuatora(client=None):
+    """
+    Aktuator objavljuje svoje trenutno stanje na zajednicku temu.
+    Na primer:
+        {"bojler": "on"}
+        {"ventilator": "off"}
+        {"svetlo": "on"}
+    """
+    if config["opis_uredjaja"]["podgrupa"] != "Aktuator":
+        return
+
+    klijent = client if client is not None else mqtt_client
+
+    if klijent is None:
+        return
+
+    ime_uredjaja = uzmi_ime_uredjaja()
+    status = config["stanje_uredjaja"].get("status", "off")
+
+    poruka = json.dumps({ime_uredjaja: status})
+
+    klijent.publish(TEMA_STANJA_AKTUATORA, poruka, qos=1)
+
+
+def periodicno_objavljuj_stanje_aktuatora(): #!!!!!!!!!!!!!!!
+    """
+    Aktuator periodicno objavljuje svoje stanje.
+    Ovo pomaze da senzori dobiju stanje cak i ako su pokrenuti kasnije.
+    """
+    while True:
+        if config["opis_uredjaja"]["podgrupa"] == "Aktuator":
+            objavi_stanje_aktuatora()
+
+        time.sleep(INTERVAL_OBJAVE_AKTUATORA_SEC)
+
+
+def on_connect_stanja_aktuatora(client, userdata, flags, rc):
+    if rc == 0:
+        client.subscribe(TEMA_STANJA_AKTUATORA, qos=1)
+    else:
+        print(f"[MQTT] Neuspesna konekcija za slusanje aktuatora, kod: {rc}")
+
+
+def on_message_stanja_aktuatora(client, userdata, msg):
+    poruka = msg.payload.decode("utf-8")
+
+    try:
+        podaci = json.loads(poruka)
+
+        with state_lock:
+            for uredjaj in ["bojler", "ventilator", "svetlo"]:
+                if uredjaj in podaci:
+                    vrednost = str(podaci[uredjaj]).lower()
+
+                    if vrednost in ["on", "off"]:
+                        stanja_aktuatora[uredjaj] = vrednost
+
+    except json.JSONDecodeError:
+        print("[FAILED] Neispravan JSON na temi stanja aktuatora")
+
+
+def slusaj_stanja_aktuatora():
+    """
+    Posebna nit za senzore.
+    Ne slusa /set teme, nego samo zajednicku temu stanja aktuatora.
+    """
+    client_id = f"{uzmi_id()}-slusac-aktuatora"
+
+    client = mqtt.Client(client_id=client_id)
+    client.on_connect = on_connect_stanja_aktuatora
+    client.on_message = on_message_stanja_aktuatora
+
+    client.connect(MQTT_BROKER, MQTT_PORT, 60)
+    client.loop_forever()
+
+
+#-----POMOCNE FUNKCIJE ZA SIMULACIJU-----
+def ogranicenje(vrednost, minimum, maksimum):
+    return max(minimum, min(vrednost, maksimum))
+
+
+def simuliraj_temperaturu():
+    trenutna = config["stanje_uredjaja"]["temperatura_vode"]
+
+    if stanja_aktuatora["bojler"] == "on":
+        nova = trenutna + random.randint(1, 5)
+    else:
+        nova = trenutna - random.randint(1, 5)
+
+    config["stanje_uredjaja"]["temperatura_vode"] = ogranicenje(nova, TEMP_MIN, TEMP_MAX)
+
+
+def simuliraj_vlaznost():
+    trenutna = config["stanje_uredjaja"]["vlaznost_vazduha"]
+
+    if stanja_aktuatora["ventilator"] == "on":
+        nova = trenutna - random.randint(1, 5)
+    else:
+        nova = trenutna + random.randint(1, 5)
+
+    config["stanje_uredjaja"]["vlaznost_vazduha"] = ogranicenje(nova, VLAGA_MIN, VLAGA_MAX)
+
+
+def simuliraj_pokret():
+    global pokret_blokiran_do
+
+    sada = time.time()
+
+    if sada < pokret_blokiran_do:
+        config["stanje_uredjaja"]["pokret_detektovan"] = False
+        return
+
+    detektovan = random.random() < 0.30
+
+    if detektovan:
+        config["stanje_uredjaja"]["pokret_detektovan"] = True
+        pokret_blokiran_do = sada + PERIOD_BEZ_POKRETA_POSLE_DETEKCIJE
+    else:
+        config["stanje_uredjaja"]["pokret_detektovan"] = False
 
 
 def publisher():
     # Posebna funkcija za niti koje ce predstavljati senzore
     podgrupa = config["opis_uredjaja"]["podgrupa"]
-    uredjaj_id = uzmi_id()
-
-    delovi = uredjaj_id.split("-")
-    ime_uredjaja = "nepoznato"
-    if len(delovi) >= 2:
-        ime_uredjaja = delovi[1]
+    ime_uredjaja = uzmi_ime_uredjaja()
 
     tema_stanje = f"kupatilo/{ime_uredjaja}/stanje"
 
     while True:
         if podgrupa == "Senzor":
-            # Simulacija promene vlage
-            if "vlaznost_vazduha" in config["stanje_uredjaja"]:
-                trenutna = config["stanje_uredjaja"]["vlaznost_vazduha"]
-                nova = trenutna + random.randint(-5, 5)
-                config["stanje_uredjaja"]["vlaznost_vazduha"] = max(0, min(nova, 100))
-            elif "pokret_detektovan" in config["stanje_uredjaja"]:
-                trenutna = config["stanje_uredjaja"]["pokret_detektovan"]
-                nova = not(trenutna)
-                config["stanje_uredjaja"]["pokret_detektovan"] = nova
-            elif "temperatura_vode" in config["stanje_uredjaja"]:
-                trenutna = config["stanje_uredjaja"]["temperatura_vode"]
-                nova = trenutna + random.randint(-5, 5)
-                config["stanje_uredjaja"]["temperatura_vode"] = max(0, min(nova, 100))
+            with state_lock:
+                if "vlaznost_vazduha" in config["stanje_uredjaja"]:
+                    simuliraj_vlaznost()
+                    qos = 0
 
-            stanje_str = json.dumps(config["stanje_uredjaja"])
-            mqtt_client.publish(tema_stanje, stanje_str)
+                elif "pokret_detektovan" in config["stanje_uredjaja"]:
+                    simuliraj_pokret()
+                    qos = 1
+
+                elif "temperatura_vode" in config["stanje_uredjaja"]:
+                    simuliraj_temperaturu()
+                    qos = 1
+
+                stanje_str = json.dumps(config["stanje_uredjaja"])
+
+            mqtt_client.publish(tema_stanje, stanje_str, qos=qos)
             print(f"[MQTT] Objavljujem na {tema_stanje}: {stanje_str}")
-        time.sleep(5)
+
+        time.sleep(INTERVAL_OBJAVE_SEC)
 
 
 # Main
@@ -249,8 +410,18 @@ def main():
     mqtt_client.loop_start()
 
     # Senzorska nit
-    nit_senzor = threading.Thread(target=publisher, daemon=True)
-    nit_senzor.start()
+    podgrupa = config["opis_uredjaja"]["podgrupa"]
+
+    if podgrupa == "Senzor":
+        nit_slusac_aktuatora = threading.Thread(target=slusaj_stanja_aktuatora, daemon=True)
+        nit_slusac_aktuatora.start()
+
+        nit_senzor = threading.Thread(target=publisher, daemon=True)
+        nit_senzor.start()
+
+    elif podgrupa == "Aktuator":
+        nit_aktuator = threading.Thread(target=periodicno_objavljuj_stanje_aktuatora, daemon=True)
+        nit_aktuator.start()
 
     # Glavni thread ceka dok program ne bude ugasen (CTRL+C)
     print(f"[RUN] Uredjaj {uzmi_id()} je aktivan. Pritisnite CTRL+C za gasenje.")

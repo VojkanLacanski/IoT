@@ -20,6 +20,10 @@ KONTROLER_STATUS_PORT = 1902
 INTERVAL_STATUS_SEC = 5  # Svakih 5 sekundi saljemo STATUS svim uredjajima
 MAX_PROMASAJA = 3  # Posle 3 uzastopna neodgovorena proglasavamo uredjaj nedostupnim
 
+VREME_GASENJA_SVETLA_SEC = 10
+poslednji_pokret_ts = None
+svetlo_trenutno = "off"
+
 """
 Lista dozvoljenih tipova uredjaja
 Samo uredjaji ciji tip se nalazi ovde ce biti prihvaceni.
@@ -375,20 +379,27 @@ def on_message(client, userdata, msg):
                     client.publish("kupatilo/ventilator/set", "OFF")
             elif ime_uredjaja == "svetlo" and "pokret_detektovan" in stanje:
                 pokret = stanje["pokret_detektovan"]
+                sada = time.time()
 
                 if pokret == True:
-                    print("[LOGIC] Pokret detektovan -> PALIM SVETLO")
-                    client.publish("kupatilo/svetlo/set", "ON")
+                    poslednji_pokret_ts = sada
+
+                    if svetlo_trenutno != "on":
+                        print("[LOGIC] Pokret detektovan -> PALIM SVETLO")
+                        client.publish("kupatilo/svetlo/set", "ON", qos=1)
+                        svetlo_trenutno = "on"
                 else:
-                    print("[LOGIC] Pokret nije detektovan -> GASIM SVETLO")
-                    client.publish("kupatilo/svetlo/set", "OFF")
+                    if svetlo_trenutno == "on" and poslednji_pokret_ts is not None and sada - poslednji_pokret_ts >= VREME_GASENJA_SVETLA_SEC:
+                        print("[LOGIC] Pokret nije detektovan -> GASIM SVETLO")
+                        client.publish("kupatilo/svetlo/set", "OFF", qos=1)
+                        svetlo_trenutno = "off"
             elif ime_uredjaja == "bojler" and "temperatura_vode" in stanje:
                 temperatura = stanje["temperatura_vode"]
 
                 if temperatura >= 60:
                     print(f"[LOGIC] Temperatura vode je {temperatura} -> GASIM BOJLER")
                     client.publish("kupatilo/bojler/set", "OFF")
-                elif temperatura < 40:
+                elif temperatura < 10:
                     print(f"[LOGIC] Temperatura vode je {temperatura} -> PALIM BOJLER")
                     client.publish("kupatilo/bojler/set", "ON")
 
