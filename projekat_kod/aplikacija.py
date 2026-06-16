@@ -66,7 +66,7 @@ def on_message(client, userdata, msg):
                 vlaga_var.set(f"{stanje['vlaznost_vazduha']} %")
             elif "bojler" in tema and "temperatura_vode" in stanje:
                 temp_var.set(f"{stanje['temperatura_vode']} °C")
-            elif "pokret" in tema and "pokret_detektovan" in stanje:
+            elif "svetlo" in tema and "pokret_detektovan" in stanje:
                 pokret_var.set("DA" if stanje["pokret_detektovan"] else "NE")
         except json.JSONDecodeError:
             pass
@@ -181,6 +181,6 @@ tk.Label(root, text="KONTROLNA TABLA", font=("Helvetica", 18, "bold"), bg="#1a25
 
 napravi_karticu(root, "VENTILACIJA", "ventilator", "ventilator", vlaga_var, vent_akt_var, "Vlažnost vazduha:")
 napravi_karticu(root, "BOJLER", "bojler", "bojler", temp_var, bojler_akt_var, "Temperatura vode:")
-napravi_karticu(root, "OSVETLJENJE", "pokret", "svetlo", pokret_var, svetlo_akt_var, "Prisustvo:")
+napravi_karticu(root, "OSVETLJENJE", "svetlo", "svetlo", pokret_var, svetlo_akt_var, "Prisustvo:")
 
 root.mainloop()

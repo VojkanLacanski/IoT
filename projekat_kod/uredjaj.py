@@ -182,6 +182,9 @@ def on_connect(client, userdata, flags, rc):
             client.subscribe(tema_set, qos=1)
             print(f"[MQTT] Pretplacen na temu: {tema_set}")
             objavi_stanje_aktuatora(client)
+
+            pocetno_stanje = config["stanje_uredjaja"]["status"].upper()
+            client.publish(tema_set, pocetno_stanje, qos=1)
     else:
         print(f"[MQTT] Neuspesna konekcija, kod: {rc}")
 
