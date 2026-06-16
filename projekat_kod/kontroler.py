@@ -21,7 +21,7 @@ INTERVAL_STATUS_SEC = 5  # Svakih 5 sekundi saljemo STATUS svim uredjajima
 MAX_PROMASAJA = 3  # Posle 3 uzastopna neodgovorena proglasavamo uredjaj nedostupnim
 
 VREME_GASENJA_SVETLA_SEC = 10
-poslednji_pokret_ts = None
+pocetak_bez_pokreta = None
 svetlo_trenutno = "off"
 
 """
@@ -357,7 +357,7 @@ def on_connect(client, userdata, flags, rc):
 
 
 def on_message(client, userdata, msg):
-    global poslednji_pokret_ts, svetlo_trenutno
+    global pocetak_bez_pokreta, svetlo_trenutno
 
     tema = msg.topic
     poruka = msg.payload.decode("utf-8")
@@ -384,14 +384,21 @@ def on_message(client, userdata, msg):
                 sada = time.time()
 
                 if pokret == True:
-                    poslednji_pokret_ts = sada
+                    pocetak_bez_pokreta = None
 
                     if svetlo_trenutno != "on":
                         print("[LOGIC] Pokret detektovan -> PALIM SVETLO")
                         client.publish("kupatilo/svetlo/set", "ON", qos=1)
                         svetlo_trenutno = "on"
+                    else:
+                        print("[LOGIC] Pokret detektovan -> svetlo je VEC UPALJENO")
                 else:
-                    if svetlo_trenutno == "on" and poslednji_pokret_ts is not None and sada - poslednji_pokret_ts >= VREME_GASENJA_SVETLA_SEC:
+                    if pocetak_bez_pokreta is None:
+                        pocetak_bez_pokreta = sada
+
+                    proslo = sada - pocetak_bez_pokreta
+
+                    if svetlo_trenutno == "on" and proslo >= VREME_GASENJA_SVETLA_SEC:
                         print("[LOGIC] Pokret nije detektovan -> GASIM SVETLO")
                         client.publish("kupatilo/svetlo/set", "OFF", qos=1)
                         svetlo_trenutno = "off"

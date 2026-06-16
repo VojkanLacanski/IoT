@@ -22,15 +22,11 @@ TEMP_MAX = 60
 VLAGA_MIN = 0
 VLAGA_MAX = 100
 
-PERIOD_BEZ_POKRETA_POSLE_DETEKCIJE = 10
-
 stanja_aktuatora = {
     "bojler": "off",
     "ventilator": "off",
     "svetlo": "off"
 }
-
-pokret_blokiran_do = 0
 
 state_lock = threading.Lock()
 
@@ -319,21 +315,9 @@ def simuliraj_vlaznost():
 
 
 def simuliraj_pokret():
-    global pokret_blokiran_do
-
-    sada = time.time()
-
-    if sada < pokret_blokiran_do:
-        config["stanje_uredjaja"]["pokret_detektovan"] = False
-        return
-
     detektovan = random.random() < 0.30
 
-    if detektovan:
-        config["stanje_uredjaja"]["pokret_detektovan"] = True
-        pokret_blokiran_do = sada + PERIOD_BEZ_POKRETA_POSLE_DETEKCIJE
-    else:
-        config["stanje_uredjaja"]["pokret_detektovan"] = False
+    config["stanje_uredjaja"]["pokret_detektovan"] = detektovan
 
 
 def publisher():
