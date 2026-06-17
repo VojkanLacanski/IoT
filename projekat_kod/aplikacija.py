@@ -19,28 +19,62 @@ def on_connect(client, userdata, flags, rc):
 
 def azuriraj_boje(meta_id, stanje):
     if meta_id in ui_elementi:
-        boja_pozadine = "#c0392b" if stanje == "safe_mode" else "#34495e"
-        
-        elementi = ui_elementi[meta_id]
-        elementi["frame"].configure(bg=boja_pozadine)
-        for widget in elementi["labele"]:
-            widget.configure(bg=boja_pozadine)
+        kljucevi = [meta_id]
+    else:
+        kljucevi = [f"{meta_id}-senzor", f"{meta_id}-aktuator"]
+
+    for kljuc in kljucevi:
+        if kljuc in ui_elementi:
+            elementi = ui_elementi[kljuc]
             
-        # AKO JE KVAR -> Ispiši tekst upozorenja
-        if stanje == "safe_mode":
-            elementi["var"].set("NEDOSTUPAN\n(SAFE MODE)")
-            
-        # AKO JE NORMALNO GAŠENJE (offline) -> Vrati na crtice
-        elif stanje == "offline":
-            if elementi["is_senzor"]:
-                if "ventilator" in meta_id:
-                    elementi["var"].set("-- %")
-                elif "bojler" in meta_id:
-                    elementi["var"].set("-- °C")
-                elif "pokret" in meta_id or "svetlo" in meta_id:
-                    elementi["var"].set("--")
-            else:
-                elementi["var"].set("Stanje: Nepoznato")
+            # 1. KVAR (Safe Mode) -> Postavljamo CRVENU boju, ispisujemo gresku i gasimo dugmice
+            if stanje == "safe_mode":
+                boja_pozadine = "#c0392b"
+                
+                elementi["frame"].configure(bg=boja_pozadine)
+                for widget in elementi["labele"]:
+                    widget.configure(bg=boja_pozadine)
+                    
+                elementi["var"].set("NEDOSTUPAN\n(SAFE MODE)")
+                
+                # Onemogucavamo dugmice ako je u pitanju aktuator
+                if not elementi["is_senzor"]:
+                    for btn in elementi.get("dugmici", []):
+                        btn.configure(state=tk.DISABLED)
+                
+            # 2. NORMALNO GAŠENJE (Offline / byebye) -> Vracamo pozadinu, crtice i gasimo dugmice
+            elif stanje == "offline":
+                boja_pozadine = "#34495e"
+                
+                elementi["frame"].configure(bg=boja_pozadine)
+                for widget in elementi["labele"]:
+                    widget.configure(bg=boja_pozadine)
+                    
+                if elementi["is_senzor"]:
+                    if "ventilator" in kljuc:
+                        elementi["var"].set("-- %")
+                    elif "bojler" in kljuc:
+                        elementi["var"].set("-- °C")
+                    elif "svetlo" in kljuc or "pokret" in kljuc:
+                        elementi["var"].set("--")
+                else:
+                    elementi["var"].set("Stanje: Nepoznato")
+                    # Onemogucavamo dugmice jer uredjaj nije na mrezi
+                    for btn in elementi.get("dugmici", []):
+                        btn.configure(state=tk.DISABLED)
+                    
+            # 3. UREĐAJ RADI (Online) -> Vracamo PLAVU boju i palimo dugmice
+            elif stanje == "online":
+                boja_pozadine = "#34495e"
+                
+                elementi["frame"].configure(bg=boja_pozadine)
+                for widget in elementi["labele"]:
+                    widget.configure(bg=boja_pozadine)
+                
+                # Omogucavamo dugmice jer je uredjaj online
+                if not elementi["is_senzor"]:
+                    for btn in elementi.get("dugmici", []):
+                        btn.configure(state=tk.NORMAL)
 
 
 def on_message(client, userdata, msg):

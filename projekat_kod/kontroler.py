@@ -106,14 +106,14 @@ def deregistruj_uredjaj(uredjaj_id):
 
             delovi = uredjaj_id.split("-")
             if len(delovi) >= 3:
-                ime_uredjaja = f"{delovi[1]-delovi[2]}"
+                ime_uredjaja = f"{delovi[1]}-{delovi[2]}"
             else:
                 ime_uredjaja = delovi[1] if len(delovi) > 1 else "nepoznato"
 
             poruka_offline = json.dumps({"uredjaj": ime_uredjaja, "stanje": "offline"})
             if mqtt_client:
                 mqtt_client.publish("kupatilo/obavestenja", poruka_offline)
-                
+
 
 # Parsiranje SSDP NOTIFY poruke
 def parsiraj_notify(tekst):
