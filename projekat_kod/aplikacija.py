@@ -198,16 +198,21 @@ def napravi_karticu(roditelj, naslov_tekst, ime_senzora, ime_aktuatora, senzor_v
     
     btn_frame = tk.Frame(a_frame, bg="#34495e")
     btn_frame.pack(expand=True)
-    tk.Button(btn_frame, text="ON", bg="#27ae60", fg="white", font=("Helvetica", 10, "bold"), width=5,
-              command=lambda: posalji_komandu(ime_aktuatora, "ON")).pack(side=tk.LEFT, padx=5)
-    tk.Button(btn_frame, text="OFF", bg="#c0392b", fg="white", font=("Helvetica", 10, "bold"), width=5,
-              command=lambda: posalji_komandu(ime_aktuatora, "OFF")).pack(side=tk.RIGHT, padx=5)
+    
+    btn_on = tk.Button(btn_frame, text="ON", bg="#27ae60", fg="white", font=("Helvetica", 10, "bold"), width=5,
+              state=tk.DISABLED, command=lambda: posalji_komandu(ime_aktuatora, "ON"))
+    btn_on.pack(side=tk.LEFT, padx=5)
+    
+    btn_off = tk.Button(btn_frame, text="OFF", bg="#c0392b", fg="white", font=("Helvetica", 10, "bold"), width=5,
+              state=tk.DISABLED, command=lambda: posalji_komandu(ime_aktuatora, "OFF"))
+    btn_off.pack(side=tk.RIGHT, padx=5)
 
     ui_elementi[f"{ime_aktuatora}-aktuator"] = {
         "frame": a_frame, 
         "labele": [al1, al2, btn_frame], 
         "var": aktuator_var,
-        "is_senzor": False
+        "is_senzor": False,
+        "dugmici": [btn_on, btn_off] 
     }
 
 
