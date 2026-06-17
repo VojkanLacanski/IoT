@@ -35,37 +35,37 @@ sock   = None   # UDP socket
 mqtt_client = None  # MQTT client
 
 
-#SSDP funkcije
+# SSDP funkcije
 def ucitaj_config(putanja_fajla):
-    """Ucitava JSON fajl uredjaja i vraca ga kao Python recnik."""
+    # Ucitava JSON fajl uredjaja i vraca ga kao Python recnik
     with open(putanja_fajla, "r", encoding="utf-8") as f:
         return json.load(f)
 
 
 def uzmi_grupu():
-    """Vraca grupu uredjaja iz ucitane konfiguracije."""
+    # Vraca grupu uredjaja iz ucitane konfiguracije
     return config['opis_uredjaja']['grupa']
 
 
 def uzmi_id():
-    """Vraca ID uredjaja iz ucitane konfiguracije."""
+    # Vraca ID uredjaja iz ucitane konfiguracije
     return config["opis_uredjaja"]["identifikacija"]["id"]
 
 
 def uzmi_tip():
-    """Vraca tip uredjaja (UPnP URN string) iz konfiguracije."""
+    # Vraca tip uredjaja (UPnP URN string) iz konfiguracije
     return config["opis_uredjaja"]["identifikacija"]["tip"]
 
 
 def uzmi_port():
-    """Vraca port na kom ovaj uredjaj slusa unicast poruke."""
+    # Vraca port na kom ovaj uredjaj slusa unicast poruke
     return config["opis_uredjaja"]["identifikacija"]["port"]
 
 
 def uzmi_ime_uredjaja():
     """
     Iz ID-ja tipa id:kupatilo-bojler-senzor
-    izvlaci ime uredjaja: bojler, ventilator ili svetlo.
+    izvlaci ime uredjaja: bojler, ventilator ili svetlo
     """
     delovi = uzmi_id().split("-")
 
@@ -76,21 +76,17 @@ def uzmi_ime_uredjaja():
 
 
 def uzmi_stanje():
-    """Vraca trenutno stanje uredjaja kao JSON string."""
+    # Vraca trenutno stanje uredjaja kao JSON string
     return json.dumps(config["stanje_uredjaja"])
 
 
 def posalji_ssdp(nts_vrednost):
     """
-    Salje SSDP NOTIFY poruku na multicast adresu.
+    Salje SSDP NOTIFY poruku na multicast adresu
 
     Parametar nts_vrednost moze biti:
         "ssdp:alive"  — uredjaj se oglasava da je aktivan
         "ssdp:byebye" — uredjaj se odjavljuje pre gasenja
-
-    Poruka sada sadrzi i PORT liniju!
-    Kontroler ce procitati ovaj port i koristiti ga
-    kada bude slao STATUS upite ovom uredjaju.
     """
     poruka = (
         "NOTIFY * HTTP/1.1\r\n"
@@ -111,17 +107,13 @@ def posalji_ssdp(nts_vrednost):
 
 def obradi_poruku(poruka_bytes, adresa_posiljaoca):
     """
-    Poziva se kad stigne UDP poruka od kontrolera.
+    Poziva se kad stigne UDP poruka od kontrolera
 
     Kontroler moze poslati:
       STATUS <device_id> — trazi trenutno stanje ovog uredjaja
 
     Uredjaj odgovara sa:
       STATUS-REPLY USN:<id> STATE:<json_stanje>
-
-    Odgovaramo na adresu sa koje je stigao upit (adresa_posiljaoca).
-    To je adresa socket-a kontrolera koji je poslao STATUS.
-    Kontroler ce primiti odgovor na istom socket-u na koji je poslao upit.
     """
     tekst = poruka_bytes.decode(errors="ignore")
 
@@ -137,12 +129,7 @@ def obradi_poruku(poruka_bytes, adresa_posiljaoca):
 
 # Petlja slusanja
 def slusaj():
-    """
-    Beskonacna petlja koja ceka UDP poruke od kontrolera.
-    Pokrece se u posebnoj niti da ne blokira glavni program.
-    Uredjaj slusa SAMO na SVOM portu.
-    Zbog toga vise uredjaja moze istovremeno da radi bez konflikta.
-    """
+    # Beskonacna petlja koja ceka UDP poruke od kontrolera
     print(f"[LISTEN] Uredjaj {uzmi_id()} slusa na portu {uzmi_port()}...")
     while True:
         try:
@@ -215,13 +202,6 @@ def on_message(client, userdata, msg):
 
 
 def objavi_stanje_aktuatora(client=None):
-    """
-    Aktuator objavljuje svoje trenutno stanje na zajednicku temu.
-    Na primer:
-        {"bojler": "on"}
-        {"ventilator": "off"}
-        {"svetlo": "on"}
-    """
     if config["opis_uredjaja"]["podgrupa"] != "Aktuator":
         return
 
@@ -238,11 +218,7 @@ def objavi_stanje_aktuatora(client=None):
     klijent.publish(TEMA_STANJA_AKTUATORA, poruka, qos=1)
 
 
-def periodicno_objavljuj_stanje_aktuatora(): #!!!!!!!!!!!!!!!
-    """
-    Aktuator periodicno objavljuje svoje stanje.
-    Ovo pomaze da senzori dobiju stanje cak i ako su pokrenuti kasnije.
-    """
+def periodicno_objavljuj_stanje_aktuatora():
     while True:
         if config["opis_uredjaja"]["podgrupa"] == "Aktuator":
             objavi_stanje_aktuatora()
@@ -276,10 +252,6 @@ def on_message_stanja_aktuatora(client, userdata, msg):
 
 
 def slusaj_stanja_aktuatora():
-    """
-    Posebna nit za senzore.
-    Ne slusa /set teme, nego samo zajednicku temu stanja aktuatora.
-    """
     client_id = f"{uzmi_id()}-slusac-aktuatora"
 
     client = mqtt.Client(client_id=client_id)
@@ -373,10 +345,6 @@ def main():
     # Postavljamo TTL za multicast (2 = lokalna mreza)
     sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, 2)
 
-    """
-    Vezujemo socket za SOPSTVENI port (ocitan iz JSON-a).
-    Zahvaljujuci ovome, svaki uredjaj slusa na drugom portu.
-    """
     sock.bind(("", uzmi_port()))
 
     # Registrujemo handler za CTRL+C

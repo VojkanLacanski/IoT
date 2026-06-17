@@ -3,57 +3,60 @@ from tkinter import font
 import paho.mqtt.client as mqtt
 import json
 
-# --- KONFIGURACIJA ---
-MQTT_BROKER = "127.0.0.1" # Obavezno promeni IP ako prebacuješ na drugi laptop
+MQTT_BROKER = "10.1.148.26"
 MQTT_PORT = 1883
 
 ui_elementi = {}
+
 
 # --- MQTT LOGIKA ---
 def on_connect(client, userdata, flags, rc):
     print("[MQTT] Aplikacija povezana na broker!")
     client.subscribe("kupatilo/+/stanje")    # Ocitavanja senzora
     client.subscribe("kupatilo/+/set")       # Komande ka aktuatoru
-    client.subscribe("kupatilo/obavestenja") # Alarmi za kvarove / byebye
+    client.subscribe("kupatilo/obavestenja") # Alarmi za kvarove
+
 
 def azuriraj_boje(meta_id, stanje):
-    """Menja boju i po potrebi resetuje tekst za specifični deo kartice koji padne"""
     if meta_id in ui_elementi:
-        boja_pozadine = "#c0392b" if stanje == "offline" else "#34495e"
+        boja_pozadine = "#c0392b" if stanje == "safe_mode" else "#34495e"
         
         elementi = ui_elementi[meta_id]
         elementi["frame"].configure(bg=boja_pozadine)
         for widget in elementi["labele"]:
             widget.configure(bg=boja_pozadine)
             
-        # -- NOVA LOGIKA: Vraćanje teksta na podrazumevane vrednosti (dve crte) --
-        if stanje == "offline":
+        # AKO JE KVAR -> Ispiši tekst upozorenja
+        if stanje == "safe_mode":
+            elementi["var"].set("NEDOSTUPAN\n(SAFE MODE)")
+            
+        # AKO JE NORMALNO GAŠENJE (offline) -> Vrati na crtice
+        elif stanje == "offline":
             if elementi["is_senzor"]:
                 if "ventilator" in meta_id:
                     elementi["var"].set("-- %")
                 elif "bojler" in meta_id:
                     elementi["var"].set("-- °C")
-                elif "pokret" in meta_id:
+                elif "pokret" in meta_id or "svetlo" in meta_id:
                     elementi["var"].set("--")
             else:
                 elementi["var"].set("Stanje: Nepoznato")
+
 
 def on_message(client, userdata, msg):
     tema = msg.topic
     poruka = msg.payload.decode("utf-8")
     
-    # 1. ALARMI (Pali se crvena boja samo za onaj deo koji padne i resetuje ispis)
     if tema == "kupatilo/obavestenja":
         try:
             podaci = json.loads(poruka)
-            precizan_uredjaj = podaci.get("uredjaj") # npr. "bojler-senzor" ili "svetlo-aktuator"
+            precizan_uredjaj = podaci.get("uredjaj")
             stanje = podaci.get("stanje")
             if precizan_uredjaj:
                 root.after(0, azuriraj_boje, precizan_uredjaj, stanje)
         except json.JSONDecodeError:
             pass
 
-    # 2. OCITAVANJA SENZORA
     elif tema.endswith("/stanje"):
         delovi = tema.split("/")
         if len(delovi) >= 2:
@@ -71,7 +74,6 @@ def on_message(client, userdata, msg):
         except json.JSONDecodeError:
             pass
 
-    # 3. STANJE AKTUATORA
     elif tema.endswith("/set"):
         delovi = tema.split("/")
         if len(delovi) >= 2:
@@ -86,6 +88,7 @@ def on_message(client, userdata, msg):
             elif ime_aktuatora == "svetlo":
                 svetlo_akt_var.set(f"Stanje: {novo_stanje}")
 
+
 def posalji_komandu(uredjaj, akcija):
     komanda = {"uredjaj": uredjaj, "akcija": akcija}
     mqtt_client.publish("kupatilo/komande", json.dumps(komanda))
@@ -97,7 +100,7 @@ mqtt_client.on_message = on_message
 mqtt_client.connect(MQTT_BROKER, MQTT_PORT, 60)
 mqtt_client.loop_start()
 
-# --- GUI LOGIKA (TKINTER) ---
+#-----GUI-----
 root = tk.Tk()
 root.title("Pametno Kupatilo")
 root.geometry("600x650")
@@ -119,25 +122,22 @@ vent_akt_var = tk.StringVar(value="Stanje: Nepoznato")
 bojler_akt_var = tk.StringVar(value="Stanje: Nepoznato")
 svetlo_akt_var = tk.StringVar(value="Stanje: Nepoznato")
 
+
 def napravi_karticu(roditelj, naslov_tekst, ime_senzora, ime_aktuatora, senzor_var, aktuator_var, merna_jedinica_tekst):
     card_frame = tk.Frame(roditelj, bg="#2c3e50", bd=0)
     card_frame.pack(expand=True, fill=tk.BOTH, padx=15, pady=10)
     
-    # Naslov (po defaultu se centrira u sredinu card_frame-a)
     tk.Label(card_frame, text=naslov_tekst, font=naslov_font, bg="#2c3e50", fg="#ecf0f1").pack(pady=5)
     
     content_frame = tk.Frame(card_frame, bg="#2c3e50")
     content_frame.pack(expand=True, fill=tk.BOTH, padx=10, pady=(0, 10))
-
-    # --- MAGIJA ZA PORAVNANJE (Koristimo Grid sistem) ---
-    # Definisemo da kolona 0 i kolona 1 moraju biti u 50/50 odnosu bez obzira na sadrzaj
     content_frame.columnconfigure(0, weight=1, uniform="polovina")
     content_frame.columnconfigure(1, weight=1, uniform="polovina")
     content_frame.rowconfigure(0, weight=1)
 
     # --- LEVA STRANA: SENZOR ---
     s_frame = tk.Frame(content_frame, bg="#34495e", bd=2, relief=tk.FLAT)
-    s_frame.grid(row=0, column=0, sticky="nsew", padx=5) # .grid umesto .pack
+    s_frame.grid(row=0, column=0, sticky="nsew", padx=5)
     
     sl1 = tk.Label(s_frame, text="SENZOR", font=mali_naslov, bg="#34495e", fg="#95a5a6")
     sl1.pack(pady=10)
@@ -155,7 +155,7 @@ def napravi_karticu(roditelj, naslov_tekst, ime_senzora, ime_aktuatora, senzor_v
 
     # --- DESNA STRANA: AKTUATOR ---
     a_frame = tk.Frame(content_frame, bg="#34495e", bd=2, relief=tk.FLAT)
-    a_frame.grid(row=0, column=1, sticky="nsew", padx=5) # .grid umesto .pack
+    a_frame.grid(row=0, column=1, sticky="nsew", padx=5)
     
     al1 = tk.Label(a_frame, text="AKTUATOR", font=mali_naslov, bg="#34495e", fg="#95a5a6")
     al1.pack(pady=10)
@@ -175,6 +175,7 @@ def napravi_karticu(roditelj, naslov_tekst, ime_senzora, ime_aktuatora, senzor_v
         "var": aktuator_var,
         "is_senzor": False
     }
+
 
 # Generisanje Interfejsa (Prosleđujemo imena senzora i aktuatora)
 tk.Label(root, text="KONTROLNA TABLA", font=("Helvetica", 18, "bold"), bg="#1a252f", fg="white").pack(pady=15)

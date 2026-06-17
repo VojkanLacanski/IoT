@@ -9,12 +9,6 @@ MULTICAST_PORT = 1900               # SSDP standradni port
 MQTT_BROKER = "127.0.0.1"            # Adresa MQTT brokera
 MQTT_PORT = 1883                     # Port MQTT brokera
 
-"""
-Port sa kog kontroler SALJE STATUS upite.
-Uredjaji ce primiti upit od ovog porta i odgovoriti NA ISTI port.
-Zahvaljujuci tome kontroler moze primiti odgovor na istom socket-u
-na koji je poslao upit — nema potrebe za zasebnim "listener" socket-om.
-"""
 KONTROLER_STATUS_PORT = 1902
 
 INTERVAL_STATUS_SEC = 5  # Svakih 5 sekundi saljemo STATUS svim uredjajima
@@ -26,8 +20,8 @@ svetlo_trenutno = "off"
 
 """
 Lista dozvoljenih tipova uredjaja
-Samo uredjaji ciji tip se nalazi ovde ce biti prihvaceni.
-Ako zelimo da dozvolimo novi tip, samo dodamo string u ovu listu.
+Samo uredjaji ciji tip se nalazi ovde ce biti prihvaceni
+Ako zelimo da dozvolimo novi tip, samo dodamo string u ovu listu
 """
 DOZVOLJENI_TIPOVI = [
     "urn:schemas-upnp-org:device:WaterHeaterActuator:1",
@@ -38,17 +32,6 @@ DOZVOLJENI_TIPOVI = [
     "urn:schemas-upnp-org:device:HumiditySensor:1",
 ]
 
-# Interna lista uredjaja
-# Recnik oblika:  { "id:kupatilo-bojler-aktuator": { ...podaci... }, ... }
-# Svaki uredjaj ima:
-#   id        — jedinstveni string identifikator
-#   tip       — UPnP tip uredjaja
-#   grupa     — npr. "KUPATILO"
-#   ip        — IP adresa sa koje se uredjaj oglasio
-#   port      — PORT na kom uredjaj slusa (procitano iz SSDP NOTIFY poruke)
-#   stanje    — recnik sa trenutnim vrednostima parametara
-#   aktivan   — True / False
-#   promasaji — broj uzastopnih neodgovaranja
 uredjaji = {}
 
 # Zakljucavanje — vise niti pristupa recniku, ovo sprecava konflikte
@@ -59,7 +42,7 @@ mqtt_client = None  # MQTT client
 
 # Callback funkcija
 def promena_stanja(uredjaj_id, staro_stanje, novo_stanje):
-    #Ova funkcija se poziva automatski kada se stanje nekog uredjaja promeni.
+    # Ova funkcija se poziva automatski kada se stanje nekog uredjaja promeni
 
     print(f"\n[CALLBACK] Promena stanja: {uredjaj_id}")
     print(f"  Staro: {staro_stanje}")
@@ -69,8 +52,8 @@ def promena_stanja(uredjaj_id, staro_stanje, novo_stanje):
 # Azuriranje stanja uredjaja
 def azuriraj_stanje(uredjaj_id, novo_stanje_recnik):
     """
-    Azurira stanje uredjaja u internoj listi.
-    Ako je stanje zaista promenjeno, poziva callback.
+    Azurira stanje uredjaja u internoj listi
+    Ako je stanje zaista promenjeno, poziva callback
     """
     with lock:  # Zakljucavamo dok menjamo recnik (bezbednost niti)
         if uredjaj_id not in uredjaji:
@@ -81,18 +64,12 @@ def azuriraj_stanje(uredjaj_id, novo_stanje_recnik):
         # Proveravamo da li je stanje zaista promenjeno
         if staro != novo_stanje_recnik:
             uredjaji[uredjaj_id]["stanje"] = novo_stanje_recnik  # Postavljamo novo stanje
-
-            """
-            Pokrecemo callback u posebnoj niti da ne blokira ostale operacije.
-            Kopiramo vrednosti jer ce se recnik mozda promeniti pre nego sto
-            nit stigne da se pokrene.
-            """
             threading.Thread(target=promena_stanja, args=(uredjaj_id, dict(staro), dict(novo_stanje_recnik)), daemon=True).start()
 
 
 # Registracija novog uredjaja
 def registruj_uredjaj(uredjaj_id, tip, grupa, ip, port):
-    #Dodaje novi uredjaj u internu listu ili reaktivira vec postojeci.
+    # Dodaje novi uredjaj u internu listu ili reaktivira vec postojeci
 
     with lock:
         if uredjaj_id not in uredjaji:
@@ -119,34 +96,35 @@ def registruj_uredjaj(uredjaj_id, tip, grupa, ip, port):
 
 # Deregistracija (BYEBYE)
 def deregistruj_uredjaj(uredjaj_id):
-    #Oznacava uredjaj kao neaktivan kada posalje BYEBYE poruku.
+    # Oznacava uredjaj kao neaktivan kada posalje BYEBYE poruku.
+    global mqtt_client
 
     with lock:
         if uredjaj_id in uredjaji:
             uredjaji[uredjaj_id]["aktivan"] = False
             print(f"[-] Uredjaj se ugasio (byebye): {uredjaj_id}")
 
+            delovi = uredjaj_id.split("-")
+            if len(delovi) >= 3:
+                ime_uredjaja = f"{delovi[1]-delovi[2]}"
+            else:
+                ime_uredjaja = delovi[1] if len(delovi) > 1 else "nepoznato"
+
+            poruka_offline = json.dumps({"uredjaj": ime_uredjaja, "stanje": "offline"})
+            if mqtt_client:
+                mqtt_client.publish("kupatilo/obavestenja", poruka_offline)
+                
 
 # Parsiranje SSDP NOTIFY poruke
 def parsiraj_notify(tekst):
     """
-    Iz teksta SSDP NOTIFY poruke izvlaci kljucne vrednosti.
+    Iz teksta SSDP NOTIFY poruke izvlaci kljucne vrednosti
     Vraca recnik sa kljucevima: NT, NTS, USN, GRUPA, PORT
-    ili None ako parsiranje nije uspelo.
-
-    Primer SSDP NOTIFY poruke:
-        NOTIFY * HTTP/1.1
-        HOST: 239.255.255.250:1900
-        NT: urn:schemas-upnp-org:device:WaterHeaterActuator:1
-        NTS: ssdp:alive
-        USN: id:kupatilo-bojler-aktuator
-        GRUPA: KUPATILO
-        PORT: 1901
+    ili None ako parsiranje nije uspelo
     """
     rezultat = {}
 
     for linija in tekst.split("\r\n"):
-        # Svaka zaglavna linija je oblika "KLJUC: vrednost"
         if ":" in linija:
             # partition(":") deli samo na prvoj dvotacki
             # (koristimo ovo umesto split(":") jer vrednost moze sadrzati ":")
@@ -157,14 +135,14 @@ def parsiraj_notify(tekst):
     if "NT" in rezultat and "NTS" in rezultat and "USN" in rezultat:
         return rezultat
 
-    return None  # Poruka nije SSDP NOTIFY ili je ostecena
+    return None
 
 
 # Slusanje na multicast (SSDP Listener)
 def slusaj_multicast():
     """
-    Slusa na SSDP multicast adresi za ALIVE i BYEBYE poruke od uredjaja.
-    Ova funkcija radi u posebnoj niti, u beskonacnoj petlji.
+    Slusa na SSDP multicast adresi za ALIVE i BYEBYE poruke od uredjaja
+    Ova funkcija radi u posebnoj niti, u beskonacnoj petlji
     """
     # Kreiramo UDP socket
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -202,14 +180,9 @@ def slusaj_multicast():
         uid = zaglavlja.get("USN", "")
         grupa = zaglavlja.get("GRUPA", "NEPOZNATA")
 
-        """
-        Citamo port na kom uredjaj slusa unicast poruke.
-        Ovo je port koji smo dodali u SSDP NOTIFY (u uredjaj.py).
-        """
         try:
             port = int(zaglavlja.get("PORT", "1901"))
         except ValueError:
-            # Ako PORT nije broj, odbacujemo poruku
             continue
 
         # Kontrola pristupa
@@ -231,22 +204,15 @@ def slusaj_multicast():
 # Periodicno slanje STATUS upita i primanje odgovora
 def periodicni_status():
     """
-    Svakih INTERVAL_STATUS_SEC sekundi salje STATUS upit svim aktivnim uredjajima
-    i ODMAH ceka odgovor od svakog.
+    Svakih 5 sekundi salje STATUS upit svim aktivnim uredjajima
+    i ODMAH ceka odgovor od svakog
 
-    Uredjaj odgovara na adresu sa koje je stigao upit.
-    Kada kontroler posalje STATUS sa porta 1902, uredjaj odgovara na port 1902.
-
-    Ako uredjaj ne odgovori u roku od 2 sekunde -> timeout -> brojimo promasaj.
-    Ako uredjaj ne odgovori MAX_PROMASAJA puta zaredom -> proglasavamo ga nedostupnim.
+    Ako uredjaj ne odgovori u roku od 2 sekunde -> timeout -> brojimo promasaj
+    Ako uredjaj ne odgovori 3 puta zaredom -> proglasavamo ga nedostupnim
     """
     # Kreiramo UDP socket za slanje STATUS upita
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
-    """
-    Vezujemo socket za port 1902.
-    Uredjaj vidi da je STATUS stigao od porta 1902 i odgovara NAZAD na port 1902.
-    """
     s.bind(("", KONTROLER_STATUS_PORT))
 
     # Timeout od 2 sekunde: ako uredjaj ne odgovori, recvfrom baca socket.timeout
@@ -255,8 +221,6 @@ def periodicni_status():
     while True:
         time.sleep(INTERVAL_STATUS_SEC)  # Cekamo pre svakog kruga
 
-        # Pravimo kopiju liste uredjaja da ne drzimo lock za vreme
-        # blokirajucih mreznih operacija
         with lock:
             uredjaji_kopija = dict(uredjaji)
 
@@ -278,14 +242,13 @@ def periodicni_status():
                 print(f"[WARNING] Nije mogao da se posalje STATUS za {uredjaj_id}: {e}")
                 continue  # Prelazimo na sledeci uredjaj
 
-            # Cekamo odgovor od uredjaja (isti socket, isti port 1902)
+            # Cekamo odgovor od uredjaja
             try:
                 podaci, _ = s.recvfrom(4096)
                 tekst = podaci.decode(errors="ignore")
 
                 # Proveravamo da li je odgovor STATUS-REPLY od pravog uredjaja
                 if "STATUS-REPLY" not in tekst or uredjaj_id not in tekst:
-                    # Primili smo nesto, ali nije ocekivani odgovor — preskacemo
                     continue
 
                 # Parsiramo JSON stanje iz odgovora
@@ -318,9 +281,12 @@ def periodicni_status():
                             print(f"[STATUS] Uredjaj proglašen nedostupnim: {uredjaj_id}")
 
                             delovi = uredjaj_id.split("-")
-                            ime_uredjaja = delovi[1] if len(delovi) > 1 else "nepoznato"
+                            if len(delovi) >= 3:
+                                ime_uredjaja = f"{delovi[1]}-{delovi[2]}"
+                            else:
+                                ime_uredjaja = delovi[1] if len(delovi) > 1 else "nepoznato"
 
-                            alarm_poruka = json.dumps({"uredjaj": ime_uredjaja, "stanje": "offline"})
+                            alarm_poruka = json.dumps({"uredjaj": ime_uredjaja, "stanje": "safe_mode"})
                             if mqtt_client:
                                 mqtt_client.publish("kupatilo/obavestenja", alarm_poruka)
                                 
@@ -328,8 +294,8 @@ def periodicni_status():
 # Stampanje stanja liste
 def stampaj_listu():
     """
-    Pomocna funkcija — stampa trenutnu listu svih uredjaja.
-    Poziva se periodicno iz main-a.
+    Pomocna funkcija — stampa trenutnu listu svih uredjaja
+    Poziva se periodicno iz main-a
     """
     with lock:
         print("\n─── Trenutna lista uredjaja ────────────────────────────")
@@ -440,12 +406,12 @@ def main():
     # Pokrecemo dve niti koje rade paralelno:
 
     # Nit 1: Slusa SSDP multicast (ALIVE / BYEBYE od uredjaja)
-    # Ova nit samo PRIMA i registruje/deregistruje uredjaje.
+    # Ova nit samo PRIMA i registruje/deregistruje uredjaje
     t1 = threading.Thread(target=slusaj_multicast, daemon=True)
     t1.start()
 
     # Nit 2: Periodicno salje STATUS svim aktivnim uredjajima I prima odgovore
-    # Ova nit obavlja i slanje i primanje — isti socket, isti port (1902).
+    # Ova nit obavlja i slanje i primanje — isti socket, isti port (1902)
     t2 = threading.Thread(target=periodicni_status, daemon=True)
     t2.start()
 
