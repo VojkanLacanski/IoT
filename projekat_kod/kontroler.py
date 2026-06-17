@@ -322,6 +322,15 @@ def on_connect(client, userdata, flags, rc):
         print(f"[MQTT] Neuspesna konekcija, kod: {rc}")
 
 
+def da_li_je_aktivan(ime_uredjaja):
+    with lock:
+        for uid, info in uredjaji.items():
+            if f"-{ime_uredjaja}-aktuator" in uid and info["aktivan"]:
+                return True
+        
+        return False
+
+
 def on_message(client, userdata, msg):
     global pocetak_bez_pokreta, svetlo_trenutno
 
@@ -341,10 +350,12 @@ def on_message(client, userdata, msg):
 
                 if vlaga > 50:
                     print(f"[LOGIC] Vlaznost je {vlaga}% -> PALIM VENTILATOR")
-                    client.publish("kupatilo/ventilator/set", "ON")
+                    if da_li_je_aktivan("ventilator"):
+                        client.publish("kupatilo/ventilator/set", "ON")
                 elif vlaga < 30:
                     print(f"[LOGIC] Vlaznost je {vlaga}% -> GASIM VENTILATOR")
-                    client.publish("kupatilo/ventilator/set", "OFF")
+                    if da_li_je_aktivan("ventilator"):
+                        client.publish("kupatilo/ventilator/set", "OFF")
             elif ime_uredjaja == "svetlo" and "pokret_detektovan" in stanje:
                 pokret = stanje["pokret_detektovan"]
                 sada = time.time()
@@ -354,8 +365,9 @@ def on_message(client, userdata, msg):
 
                     if svetlo_trenutno != "on":
                         print("[LOGIC] Pokret detektovan -> PALIM SVETLO")
-                        client.publish("kupatilo/svetlo/set", "ON", qos=1)
-                        svetlo_trenutno = "on"
+                        if da_li_je_aktivan("svetlo"):
+                            client.publish("kupatilo/svetlo/set", "ON", qos=1)
+                            svetlo_trenutno = "on"
                     else:
                         print("[LOGIC] Pokret detektovan -> svetlo je VEC UPALJENO")
                 else:
@@ -366,17 +378,20 @@ def on_message(client, userdata, msg):
 
                     if svetlo_trenutno == "on" and proslo >= VREME_GASENJA_SVETLA_SEC:
                         print("[LOGIC] Pokret nije detektovan -> GASIM SVETLO")
-                        client.publish("kupatilo/svetlo/set", "OFF", qos=1)
-                        svetlo_trenutno = "off"
+                        if da_li_je_aktivan("svetlo"):
+                            client.publish("kupatilo/svetlo/set", "OFF", qos=1)
+                            svetlo_trenutno = "off"
             elif ime_uredjaja == "bojler" and "temperatura_vode" in stanje:
                 temperatura = stanje["temperatura_vode"]
 
                 if temperatura >= 60:
                     print(f"[LOGIC] Temperatura vode je {temperatura} -> GASIM BOJLER")
-                    client.publish("kupatilo/bojler/set", "OFF")
+                    if da_li_je_aktivan("bojler"):
+                        client.publish("kupatilo/bojler/set", "OFF")
                 elif temperatura < 10:
                     print(f"[LOGIC] Temperatura vode je {temperatura} -> PALIM BOJLER")
-                    client.publish("kupatilo/bojler/set", "ON")
+                    if da_li_je_aktivan("bojler"):
+                        client.publish("kupatilo/bojler/set", "ON")
 
         except json.JSONDecodeError:
             print("[FAILED] Neispravan JSON format")
