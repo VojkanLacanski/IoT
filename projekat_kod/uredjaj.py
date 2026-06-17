@@ -290,7 +290,7 @@ def simuliraj_vlaznost():
 
 
 def simuliraj_pokret():
-    detektovan = random.random() < 0.30
+    detektovan = random.random() < 0.4
 
     config["stanje_uredjaja"]["pokret_detektovan"] = detektovan
 
